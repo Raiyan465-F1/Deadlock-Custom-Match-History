@@ -1,0 +1,143 @@
+#CmhToggle
+{
+	margin-left: 24px;
+	padding: 8px 16px;
+	vertical-align: middle;
+	background-color: #ffffff18;
+	border-radius: 4px;
+}
+
+#CmhToggle:hover
+{
+	background-color: #ffffff38;
+}
+
+#CmhToggleLabel
+{
+	color: offWhite;
+	font-size: 18px;
+	font-weight: bold;
+	text-transform: uppercase;
+}
+
+.CmhActive #CmhToggle
+{
+	background-color: #50c25066;
+}
+
+#CmhPanel
+{
+	visibility: collapse;
+	horizontal-align: center;
+	width: 1330px;
+	height: 780px;
+	flow-children: down;
+}
+
+.CmhActive #CmhPanel
+{
+	visibility: visible;
+}
+
+.CmhActive #MatchListing,
+.CmhActive #MatchListingLoading,
+.CmhActive #ModeFilter,
+.CmhActive .MatchHistoryFooter
+{
+	visibility: collapse;
+}
+
+#CmhStatus
+{
+	color: #ffffffaa;
+	font-size: 18px;
+	margin: 4px 5px 8px 5px;
+}
+
+#CmhOpenRow
+{
+	flow-children: right;
+	margin: 0px 5px 8px 5px;
+}
+
+#CmhIdEntry
+{
+	width: 280px;
+	height: 38px;
+	padding: 6px 10px;
+	color: white;
+	font-size: 18px;
+	background-color: #00000090;
+	border: 1px solid #ffffff33;
+	border-radius: 4px;
+}
+
+#CmhIdOpen
+{
+	margin-left: 8px;
+	padding: 7px 16px;
+	background-color: #ffffff18;
+	border-radius: 4px;
+}
+
+#CmhIdOpen:hover
+{
+	background-color: #ffffff38;
+}
+
+#CmhIdOpen Label
+{
+	color: offWhite;
+	font-size: 18px;
+	font-weight: bold;
+}
+
+#CmhList
+{
+	width: 100%;
+	height: 660px;
+	flow-children: right-wrap;
+	overflow: squish scroll;
+}
+
+.cmhBlock
+{
+	width: 316px;
+	height: 150px;
+	margin: 5px;
+	flow-children: down;
+	border-radius: 5px;
+	background-color: #00000090;
+}
+
+.cmhBlock:hover
+{
+	brightness: 1.3;
+}
+
+.cmhBlock.cmhSelected
+{
+	border: 2px solid #ffffff88;
+}
+
+.cmhResult
+{
+	color: white;
+	font-size: 22px;
+	font-weight: bold;
+}
+
+.cmhLine
+{
+	color: #ffffffcc;
+	font-size: 17px;
+	margin-top: 2px;
+}
+
+.cmhDim
+{
+	color: #ffffff77;
+	font-size: 15px;
+	margin-top: 2px;
+}
+

@@ -1,0 +1,16 @@
+{
+  "name": "deadlock-custom-match-history",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "modlock panorama compile content --output build/pak90_dir.vpk --addon custom_match_history"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@modlock/modlock": "^0.1.67"
+  }
+}

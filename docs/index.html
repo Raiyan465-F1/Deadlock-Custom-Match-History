@@ -1,0 +1,124 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CMH-loading</title>
+<!--
+  Helper page for the Custom Match History mod. The mod opens it in a hidden browser
+  panel with a request in the URL fragment:
+    #save:<account id>:<match id>:<mode label>   remember a custom match on this PC
+    #list:<account id>                           saved matches plus any the Deadlock API knows
+  The answer goes back through the page title, starting with "CMH|".
+
+  Saved IDs stay in this PC's browser storage and are never sent anywhere. The only outside
+  request is to the Deadlock API, and it only sends the account ID.
+-->
+<script>
+(function () {
+  var API = "https://api.deadlock-api.com/v1/matches/metadata";
+  var STORE_KEY = "cmh_matches_v1";
+  var UNKNOWN_ACCOUNT = "0";
+  var MAX_SAVED = 500;
+  var MAX_ROWS = 60; // Page titles are limited to about 4096 characters.
+  var API_TIMEOUT_MS = 8000;
+
+  function answer(value) {
+    document.title = "CMH|" + JSON.stringify(value);
+  }
+
+  function fail(reason) {
+    document.title = "CMH|ERR:" + reason;
+  }
+
+  function readStore() {
+    try {
+      return JSON.parse(localStorage.getItem(STORE_KEY)) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function savedRows(store, account) {
+    var mine = store[account] || [];
+    return account === UNKNOWN_ACCOUNT ? mine : mine.concat(store[UNKNOWN_ACCOUNT] || []);
+  }
+
+  // [match id, mode label, time, won, hero, kills, deaths, assists, souls, duration]
+  function savedToRow(saved) {
+    return [saved[0], saved[1], saved[2], null, null, null, null, null, null, null];
+  }
+
+  function team(value) {
+    return value === "Team0" ? 0 : value === "Team1" ? 1 : -1;
+  }
+
+  function apiToRow(m) {
+    var p = (m.players || [])[0] || {};
+    var mode = m.game_mode === "StreetBrawl" ? "Street Brawl" : "Standard Match";
+    return [m.match_id, mode, String(m.start_time).substring(0, 16) + " UTC", team(m.winning_team) === team(p.team) ? 1 : 0, p.hero_id, p.kills, p.deaths, p.assists, p.net_worth, m.duration_s];
+  }
+
+  function merge(saved, known) {
+    var rows = {};
+    saved.forEach(function (s) { rows[s[0]] = savedToRow(s); });
+    known.forEach(function (m) {
+      var row = apiToRow(m);
+      if (rows[row[0]]) row[1] = rows[row[0]][1];
+      rows[row[0]] = row;
+    });
+    return Object.keys(rows).map(function (id) { return rows[id]; })
+      .sort(function (a, b) { return b[0] - a[0]; })
+      .slice(0, MAX_ROWS);
+  }
+
+  function apiMatches(account) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, API_TIMEOUT_MS);
+    return fetch(API + "?account_ids=" + account + "&match_mode=private_lobby&include_info=true&include_player_info=true&only_filtered_players=true&limit=" + MAX_ROWS + "&order_by=match_id&order_direction=desc", { signal: controller.signal })
+      .then(function (response) { return response.ok ? response.json() : []; })
+      // The list still works from saved IDs when the API is busy or unreachable.
+      .catch(function () { return []; })
+      .then(function (list) { clearTimeout(timer); return list; });
+  }
+
+  function list(account) {
+    var saved = savedRows(readStore(), account);
+    if (account === UNKNOWN_ACCOUNT) {
+      answer(merge(saved, []));
+      return;
+    }
+    apiMatches(account).then(function (known) { answer(merge(saved, known)); });
+  }
+
+  function save(account, matchId, label) {
+    var store = readStore();
+    var mine = store[account] || [];
+    var exists = mine.some(function (s) { return String(s[0]) === matchId; });
+    if (!exists) {
+      mine.unshift([Number(matchId), label.substring(0, 40), new Date().toISOString().substring(0, 16).replace("T", " ") + " UTC"]);
+      store[account] = mine.slice(0, MAX_SAVED);
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(store));
+      } catch (e) {
+        fail("could not save: " + e);
+        return;
+      }
+    }
+    answer(merge(savedRows(store, account), []));
+  }
+
+  var request = location.hash.slice(1).match(/^(list|save):([0-9]{1,12})(?::([0-9]{1,20}):(.*))?$/);
+  if (!request || (request[1] === "save" && !request[3])) {
+    fail("bad request");
+    return;
+  }
+
+  if (request[1] === "list") {
+    list(request[2]);
+  } else {
+    var label = "";
+    try {
+      label = decodeURIComponent(request[4] || "");
+    } catch (e) {}
+    save(request[2], request[3], label);
+  }
+})();
+</script>
