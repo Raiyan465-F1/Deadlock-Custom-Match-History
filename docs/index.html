@@ -5,7 +5,9 @@
   Helper page for the Custom Match History mod. The mod opens it in a hidden browser
   panel with a request in the URL fragment:
     #save:<account id>:<match id>:<mode label>   remember a custom match on this PC
-    #list:<account id>                           saved matches plus any the Deadlock API knows
+    #list:<account id>                           the logged-in player's list: saved matches plus any
+                                                 the Deadlock API knows
+    #view:<account id>                           the same for another player's profile
   The answer goes back through the page title, starting with "CMH|".
 
   Saved IDs stay in this PC's browser storage and are never sent anywhere. The only outside
@@ -36,9 +38,18 @@
     }
   }
 
-  function savedRows(store, account) {
+  // Matches saved before the account was known belong to whoever is logged in next.
+  function claimUnknown(store, account) {
+    var unknown = store[UNKNOWN_ACCOUNT];
+    if (!unknown || account === UNKNOWN_ACCOUNT) return;
     var mine = store[account] || [];
-    return account === UNKNOWN_ACCOUNT ? mine : mine.concat(store[UNKNOWN_ACCOUNT] || []);
+    var have = {};
+    mine.forEach(function (s) { have[s[0]] = true; });
+    store[account] = mine.concat(unknown.filter(function (s) { return !have[s[0]]; })).slice(0, MAX_SAVED);
+    delete store[UNKNOWN_ACCOUNT];
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    } catch (e) {}
   }
 
   // [match id, mode label, time, won, hero, kills, deaths, assists, souls, duration]
@@ -79,12 +90,10 @@
       .then(function (list) { clearTimeout(timer); return list; });
   }
 
-  function list(account) {
-    var saved = savedRows(readStore(), account);
-    if (account === UNKNOWN_ACCOUNT) {
-      answer(merge(saved, []));
-      return;
-    }
+  function list(account, claim) {
+    var store = readStore();
+    if (claim) claimUnknown(store, account);
+    var saved = store[account] || [];
     apiMatches(account).then(function (known) { answer(merge(saved, known)); });
   }
 
@@ -102,17 +111,17 @@
         return;
       }
     }
-    answer(merge(savedRows(store, account), []));
+    answer(merge(store[account] || [], []));
   }
 
-  var request = location.hash.slice(1).match(/^(list|save):([0-9]{1,12})(?::([0-9]{1,20}):(.*))?$/);
+  var request = location.hash.slice(1).match(/^(list|view|save):([0-9]{1,12})(?::([0-9]{1,20}):(.*))?$/);
   if (!request || (request[1] === "save" && !request[3])) {
     fail("bad request");
     return;
   }
 
-  if (request[1] === "list") {
-    list(request[2]);
+  if (request[1] !== "save") {
+    list(request[2], request[1] === "list");
   } else {
     var label = "";
     try {

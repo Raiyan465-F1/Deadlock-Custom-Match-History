@@ -3,6 +3,7 @@
 		<include src="s2r://panorama/styles/citadel_base_styles.vcss_c" />
 		<include src="s2r://panorama/styles/citadel_db_page_shared.vcss_c" />
 		<include src="s2r://panorama/styles/citadel_db_page_profile_match_history.vcss_c" />
+		<include src="s2r://panorama/styles/citadel_match_history_block_large.vcss_c" />
 		<include src="s2r://panorama/styles/citadel_match_history_block_shared.vcss_c" />
 		<include src="s2r://panorama/styles/custom_match_history.vcss_c" />
 	</styles>
