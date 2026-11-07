@@ -8,15 +8,18 @@
     #list:<account id>                           the logged-in player's list: saved matches plus any
                                                  the Deadlock API knows
     #view:<account id>                           the same for another player's profile
+    #hide:<account id>:<match id>                remove a match from that player's list on this PC,
+                                                 then answer like #list
   The answer goes back through the page title, starting with "CMH|".
 
-  Saved IDs stay in this PC's browser storage and are never sent anywhere. The only outside
-  request is to the Deadlock API, and it only sends the account ID.
+  Saved and removed IDs stay in this PC's browser storage and are never sent anywhere. The
+  only outside request is to the Deadlock API, and it only sends the account ID.
 -->
 <script>
 (function () {
   var API = "https://api.deadlock-api.com/v1/matches/metadata";
   var STORE_KEY = "cmh_matches_v1";
+  var HIDDEN_KEY = "cmh_hidden_v1"; // { account: [match id, ...] } removed by the player
   var UNKNOWN_ACCOUNT = "0";
   var MAX_SAVED = 500;
   var MAX_ROWS = 60; // Page titles are limited to about 4096 characters.
@@ -30,11 +33,24 @@
     document.title = "CMH|ERR:" + reason;
   }
 
-  function readStore() {
+  function readJson(key) {
     try {
-      return JSON.parse(localStorage.getItem(STORE_KEY)) || {};
+      return JSON.parse(localStorage.getItem(key)) || {};
     } catch (e) {
       return {};
+    }
+  }
+
+  function readStore() {
+    return readJson(STORE_KEY);
+  }
+
+  function writeJson(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -67,10 +83,13 @@
     return [m.match_id, mode, String(m.start_time).substring(0, 16) + " UTC", team(m.winning_team) === team(p.team) ? 1 : 0, p.hero_id, p.kills, p.deaths, p.assists, p.net_worth, m.duration_s];
   }
 
-  function merge(saved, known) {
+  function merge(saved, known, hidden) {
+    var skip = {};
+    (hidden || []).forEach(function (id) { skip[id] = true; });
     var rows = {};
-    saved.forEach(function (s) { rows[s[0]] = savedToRow(s); });
+    saved.forEach(function (s) { if (!skip[s[0]]) rows[s[0]] = savedToRow(s); });
     known.forEach(function (m) {
+      if (skip[m.match_id]) return;
       var row = apiToRow(m);
       if (rows[row[0]]) row[1] = rows[row[0]][1];
       rows[row[0]] = row;
@@ -94,33 +113,56 @@
     var store = readStore();
     if (claim) claimUnknown(store, account);
     var saved = store[account] || [];
-    apiMatches(account).then(function (known) { answer(merge(saved, known)); });
+    var hidden = readJson(HIDDEN_KEY)[account] || [];
+    apiMatches(account).then(function (known) { answer(merge(saved, known, hidden)); });
+  }
+
+  function hide(account, matchId) {
+    var id = Number(matchId);
+    var store = readStore();
+    if (store[account]) store[account] = store[account].filter(function (s) { return Number(s[0]) !== id; });
+    var hidden = readJson(HIDDEN_KEY);
+    var mine = (hidden[account] || []).filter(function (h) { return h !== id; });
+    mine.unshift(id);
+    hidden[account] = mine.slice(0, MAX_SAVED);
+    if (!writeJson(STORE_KEY, store) || !writeJson(HIDDEN_KEY, hidden)) {
+      fail("could not remove");
+      return;
+    }
+    list(account, true);
   }
 
   function save(account, matchId, label) {
+    var id = Number(matchId);
     var store = readStore();
     var mine = store[account] || [];
-    var exists = mine.some(function (s) { return String(s[0]) === matchId; });
+    var exists = mine.some(function (s) { return Number(s[0]) === id; });
     if (!exists) {
-      mine.unshift([Number(matchId), label.substring(0, 40), new Date().toISOString().substring(0, 16).replace("T", " ") + " UTC"]);
+      mine.unshift([id, label.substring(0, 40), new Date().toISOString().substring(0, 16).replace("T", " ") + " UTC"]);
       store[account] = mine.slice(0, MAX_SAVED);
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify(store));
-      } catch (e) {
-        fail("could not save: " + e);
+      if (!writeJson(STORE_KEY, store)) {
+        fail("could not save");
         return;
       }
+    }
+    // Saving a removed match again, by opening it, puts it back on the list.
+    var hidden = readJson(HIDDEN_KEY);
+    if (hidden[account] && hidden[account].indexOf(id) >= 0) {
+      hidden[account] = hidden[account].filter(function (h) { return h !== id; });
+      writeJson(HIDDEN_KEY, hidden);
     }
     answer(merge(store[account] || [], []));
   }
 
-  var request = location.hash.slice(1).match(/^(list|view|save):([0-9]{1,12})(?::([0-9]{1,20}):(.*))?$/);
-  if (!request || (request[1] === "save" && !request[3])) {
+  var request = location.hash.slice(1).match(/^(list|view|save|hide):([0-9]{1,12})(?::([0-9]{1,20})(?::(.*))?)?$/);
+  if (!request || ((request[1] === "save" || request[1] === "hide") && !request[3])) {
     fail("bad request");
     return;
   }
 
-  if (request[1] !== "save") {
+  if (request[1] === "hide") {
+    hide(request[2], request[3]);
+  } else if (request[1] !== "save") {
     list(request[2], request[1] === "list");
   } else {
     var label = "";

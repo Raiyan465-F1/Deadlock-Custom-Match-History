@@ -125,6 +125,9 @@ const HISTORY_IDS = ['CmhToggle', 'CmhStatus', 'CmhList', 'CmhIdEntry', 'CmhIdOp
 const savedIds = (id) => (stored()[id] || []).map((s) => String(s[0]));
 const cardText = (world) => world.registry.get('CmhList').children.map((card) => labels(card).join(' | '));
 const hasCard = (world, id) => cardText(world).some((text) => text.includes(`Match ${id}`));
+const cardFor = (world, id) => world.registry.get('CmhList').children.find((w) => labels(w).includes(`Match ${id}`));
+const removeButton = (wrap) => wrap && wrap.children.find((c) => c.BHasClass('cmhRemove'));
+const hiddenIds = (id) => (JSON.parse(storage.get('cmh_hidden_v1') || '{}')[id] || []).map(String);
 
 seedUnknown();
 
@@ -170,7 +173,7 @@ check('matches with no account now belong to this account', savedIds(account).in
 check('the moved match is listed', hasCard(page, LEGACY_MATCH));
 
 console.log('7. Click the first card, then paste an ID');
-list.children[0].events.onactivate();
+list.children[0].children[0].events.onactivate();
 page.registry.get('CmhIdEntry').text = ` ${newMatch} `;
 page.registry.get('CmhIdOpen').events.onactivate();
 page.registry.get('CmhIdEntry').text = 'hello';
@@ -196,6 +199,7 @@ page.viewed = account;
 await poll(page);
 check('returns to the player', page.requests.at(-1) === `list:${account}` && hasCard(page, newMatch));
 check('then claims them', !stored()['0']);
+check('own cards have a remove button', list.children.length > 0 && list.children.every((w) => removeButton(w)));
 
 console.log('10. A second account on this PC sees none of the first account\'s matches');
 const other = makeWorld(HISTORY_IDS, OTHER_ACCOUNT);
@@ -208,6 +212,21 @@ for (const text of cardText(other)) console.log('CARD:', text);
 check('its own save is under its own account', savedIds(OTHER_ACCOUNT).includes('99000004'));
 check('it sees its own match', hasCard(other, '99000004'));
 check('it does not see the first account\'s matches', !hasCard(other, newMatch) && !hasCard(other, LEGACY_MATCH));
+
+console.log('11. Removing a match needs two clicks, and opening it again brings it back');
+const button = removeButton(cardFor(page, LEGACY_MATCH));
+button.events.onactivate();
+await settle();
+check('first click only asks to confirm', hasCard(page, LEGACY_MATCH) && /Confirm/.test(page.registry.get('CmhStatus').text));
+removeButton(cardFor(page, LEGACY_MATCH)).events.onactivate();
+await settle();
+console.log('STATUS:', page.registry.get('CmhStatus').text);
+check('second click removes it', !hasCard(page, LEGACY_MATCH) && !savedIds(account).includes(String(LEGACY_MATCH)));
+check('it is remembered as removed', hiddenIds(account).includes(String(LEGACY_MATCH)));
+check('other matches stay', hasCard(page, newMatch));
+page.setPostGame(String(LEGACY_MATCH), 'Standard Match (Lobby)');
+await poll(page);
+check('opening it again saves it and lists it', savedIds(account).includes(String(LEGACY_MATCH)) && !hiddenIds(account).includes(String(LEGACY_MATCH)) && hasCard(page, LEGACY_MATCH));
 
 console.log(failures ? `${failures} CHECK(S) FAILED` : 'ALL CHECKS PASSED');
 if (failures) process.exit(1);

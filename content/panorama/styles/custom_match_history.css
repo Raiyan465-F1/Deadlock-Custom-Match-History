@@ -102,14 +102,51 @@
 
 /* Valve's sizes come from CitadelMatchHistoryBlockLarge selectors, which don't match a plain panel.
    The colors, stripe, text and hover overlay come from Valve's own classes. */
+.cmhCardWrap
+{
+	margin: 5px;
+	ui-scale: 115%;
+}
+
 .cmhBlock
 {
 	width: 275px;
 	height: 136px;
-	margin: 5px;
-	ui-scale: 115%;
+	margin: 0px;
 	flow-children: down;
 	border-radius: 5px;
+}
+
+/* Sits over the card's top right corner, as a sibling of the card. */
+.cmhRemove
+{
+	horizontal-align: right;
+	vertical-align: top;
+	margin: 6px;
+	padding: 2px 8px;
+	background-color: #000000a0;
+	border-radius: 3px;
+	opacity: 0.55;
+}
+
+.cmhRemove:hover
+{
+	opacity: 1;
+	background-color: #000000e0;
+}
+
+.cmhRemove Label
+{
+	color: offWhite;
+	font-size: 13px;
+	font-weight: bold;
+	text-transform: uppercase;
+}
+
+.cmhRemove.cmhConfirm
+{
+	opacity: 1;
+	background-color: #b33a3ae0;
 }
 
 .cmhBlock:hover

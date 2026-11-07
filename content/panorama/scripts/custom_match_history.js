@@ -1,5 +1,5 @@
 "use strict";
-// Custom Match History, test build 10.
+// Custom Match History 1.0.0.
 //
 // Loaded by two dashboard layouts, both of which can see the post-game screen:
 //  - citadel_db_page_private_lobby: loaded before a custom match starts, so the match is
@@ -18,6 +18,8 @@
 	var POST_GAME_WAIT_POLLS = 5;
 	var REQUEST_TIMEOUT_SECONDS = 15;
 	var RELOAD_AFTER_MS = 15000;
+	var CONFIRM_SECONDS = 4;
+	var VERSION = "1.0.0";
 	// Hero names from the Deadlock API's assets list. New heroes show as "Hero <id>".
 	var HERO_NAMES = {
 		1: "Infernus", 2: "Seven", 3: "Vindicta", 4: "Lady Geist", 6: "Abrams", 7: "Wraith", 8: "McGinnis", 10: "Paradox",
@@ -51,6 +53,7 @@
 		requestCount: 0,
 		seenPostGameIds: {},
 		postGameWaits: {},
+		confirmRemove: "",
 	};
 
 	function log(text) {
@@ -236,12 +239,14 @@
 	// Each row from the page: [match id, mode label, time, won, hero, kills, deaths, assists, souls, duration].
 	// Only the ID is certain. The others are null when the Deadlock API doesn't know the match.
 	// The game won't let scripts create its own match card, so this copies that card's layout
-	// and uses its style classes.
-	function addCard(list, row) {
+	// and uses its style classes. The remove button sits beside the card, not inside it, so
+	// clicking it can't also open the match.
+	function addCard(list, row, removable) {
 		var matchId = row[0];
 		var won = row[3];
 		var hero = row[4];
-		var block = $.CreatePanel("Panel", list, "");
+		var wrap = addPanel(list, "cmhCardWrap");
+		var block = $.CreatePanel("Panel", wrap, "");
 		block.AddClass("matchBlock");
 		block.AddClass("cmhBlock");
 		block.AddClass(won === 1 ? "win" : won === 0 ? "loss" : "cmhUnknown");
@@ -272,12 +277,42 @@
 			setStatus("Could not draw a match card: " + e);
 			log("card draw failed: " + e);
 		}
+		if (removable) addRemoveButton(wrap, String(matchId));
+	}
+
+	// The first click asks for a second one, so a stray click can't remove a match.
+	function addRemoveButton(parent, matchId) {
+		var button = $.CreatePanel("Panel", parent, "");
+		button.AddClass("cmhRemove");
+		button.hittest = true;
+		var label = addLabel(button, "", "Remove");
+		button.SetPanelEvent("onactivate", function () {
+			if (state.confirmRemove !== matchId) {
+				state.confirmRemove = matchId;
+				button.AddClass("cmhConfirm");
+				label.text = "Confirm";
+				setStatus("Click Confirm to remove match " + matchId + " from your list.");
+				$.Schedule(CONFIRM_SECONDS, function () {
+					if (state.confirmRemove === matchId) state.confirmRemove = "";
+					try {
+						if (button.IsValid && !button.IsValid()) return;
+						button.RemoveClass("cmhConfirm");
+						label.text = "Remove";
+					} catch (e) {}
+				});
+				return;
+			}
+			state.confirmRemove = "";
+			removeMatch(matchId);
+		});
 	}
 
 	function renderList(rows) {
 		var list = find("CmhList");
 		list.RemoveAndDeleteChildren();
-		for (var i = 0; i < rows.length; i++) addCard(list, rows[i]);
+		// Only the logged-in player's own list can be changed.
+		var removable = state.listedAccount !== "" && state.listedAccount === localAccount();
+		for (var i = 0; i < rows.length; i++) addCard(list, rows[i], removable);
 		if (!rows.length) {
 			setStatus(state.listedAccount === localAccount() ? "No custom matches saved yet. Play one, or paste a match ID above." : "No custom matches found for this player.");
 			return;
@@ -321,6 +356,32 @@
 			function (reason) {
 				setStatus("Could not load the list, but pasting a match ID still works. Click Custom Matches twice to retry.");
 				log("load failed: " + reason);
+				finishLoading();
+			}
+		);
+	}
+
+	// Removes a saved match and hides it if the Deadlock API lists it, on this PC only.
+	function removeMatch(matchId) {
+		var account = localAccount();
+		if (!account || state.loading) {
+			setStatus("Wait for the list to finish loading, then try again.");
+			return;
+		}
+		state.loading = true;
+		setStatus("Removing match " + matchId + "...");
+		browserRequest(
+			"hide:" + account + ":" + matchId,
+			function (rows) {
+				state.lastLoadTime = Date.now();
+				log("removed match " + matchId);
+				renderList(rows);
+				setStatus("Removed match " + matchId + ". To add it back, paste its ID above and open it.");
+				finishLoading();
+			},
+			function (reason) {
+				setStatus("Could not remove match " + matchId + ". Try again.");
+				log("remove failed: " + reason);
 				finishLoading();
 			}
 		);
@@ -426,7 +487,7 @@
 	// ---- start ----
 
 	function init() {
-		log("loaded, test build 10");
+		log("loaded, version " + VERSION);
 		localAccount();
 		var toggle = find("CmhToggle");
 		if (toggle) toggle.SetPanelEvent("onactivate", onToggle);
